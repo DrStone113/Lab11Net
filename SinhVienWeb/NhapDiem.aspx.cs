@@ -2,6 +2,7 @@
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Web.UI.WebControls;
 
 namespace SinhVienWeb
 {
@@ -21,9 +22,43 @@ namespace SinhVienWeb
             maMon = Request.QueryString["MaMon"];
             maLop = Request.QueryString["MaLop"];
 
+            if (string.IsNullOrEmpty(maMon) || string.IsNullOrEmpty(maLop))
+            {
+                Response.Redirect("Default.aspx");
+                return;
+            }
+
             if (!IsPostBack)
             {
+                LoadThongTin();
                 LoadSinhVien();
+            }
+        }
+
+        private void LoadThongTin()
+        {
+            string connStr = ConfigurationManager.ConnectionStrings["SinhVienDB"].ConnectionString;
+
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                string sql = @"
+                    SELECT mh.TenMon, l.TenLop
+                    FROM MonHoc mh, Lop l
+                    WHERE mh.MaMon = @MaMon AND l.MaLop = @MaLop
+                ";
+
+                SqlCommand cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@MaMon", maMon);
+                cmd.Parameters.AddWithValue("@MaLop", maLop);
+
+                conn.Open();
+                SqlDataReader reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    lblTenMon.Text = reader["TenMon"].ToString() + " (" + maMon + ")";
+                    lblTenLop.Text = reader["TenLop"].ToString() + " (" + maLop + ")";
+                }
+                reader.Close();
             }
         }
 
@@ -35,11 +70,12 @@ namespace SinhVienWeb
             {
                 string sql = @"
                     SELECT sv.MSSV, sv.HoTen,
-                           ISNULL(bd.Diem, 0) AS Diem
+                           ISNULL(d.DiemThi, 0) AS DiemThi
                     FROM SinhVien sv
-                    LEFT JOIN BangDiem bd 
-                        ON sv.MSSV = bd.MSSV AND bd.MaMon = @MaMon
+                    LEFT JOIN Diem d 
+                        ON sv.MSSV = d.MSSV AND d.MaMon = @MaMon
                     WHERE sv.MaLop = @MaLop
+                    ORDER BY sv.MSSV
                 ";
 
                 SqlCommand cmd = new SqlCommand(sql, conn);
@@ -57,37 +93,74 @@ namespace SinhVienWeb
 
         protected void btnLuu_Click(object sender, EventArgs e)
         {
-            string connStr = ConfigurationManager.ConnectionStrings["SinhVienDB"].ConnectionString;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
+            try
             {
-                conn.Open();
+                string connStr = ConfigurationManager.ConnectionStrings["SinhVienDB"].ConnectionString;
 
-                foreach (System.Web.UI.WebControls.GridViewRow row in gvSinhVien.Rows)
+                using (SqlConnection conn = new SqlConnection(connStr))
                 {
-                    string mssv = row.Cells[0].Text;
-                    var txt = (System.Web.UI.WebControls.TextBox)row.FindControl("txtDiem");
-                    float diem = float.Parse(txt.Text);
+                    conn.Open();
 
-                    string sql = @"
-                        MERGE BangDiem AS target
-                        USING (SELECT @MSSV AS MSSV, @MaMon AS MaMon) AS source
-                        ON target.MSSV = source.MSSV AND target.MaMon = source.MaMon
-                        WHEN MATCHED THEN
-                            UPDATE SET Diem = @Diem
-                        WHEN NOT MATCHED THEN
-                            INSERT (MSSV, MaMon, Diem)
-                            VALUES (@MSSV, @MaMon, @Diem);";
+                    foreach (GridViewRow row in gvSinhVien.Rows)
+                    {
+                        string mssv = row.Cells[0].Text;
+                        var txt = (TextBox)row.FindControl("txtDiem");
+                        
+                        if (!string.IsNullOrEmpty(txt.Text))
+                        {
+                            decimal diem;
+                            if (decimal.TryParse(txt.Text, out diem))
+                            {
+                                if (diem < 0 || diem > 10)
+                                {
+                                    lblThongBao.Text = "⚠ Điểm phải từ 0 đến 10!";
+                                    lblThongBao.CssClass = "message-label";
+                                    lblThongBao.Style["background-color"] = "#fff3cd";
+                                    lblThongBao.Style["color"] = "#856404";
+                                    lblThongBao.Style["border"] = "1px solid #ffeaa7";
+                                    return;
+                                }
 
-                    SqlCommand cmd = new SqlCommand(sql, conn);
-                    cmd.Parameters.AddWithValue("@MSSV", mssv);
-                    cmd.Parameters.AddWithValue("@MaMon", maMon);
-                    cmd.Parameters.AddWithValue("@Diem", diem);
-                    cmd.ExecuteNonQuery();
+                                string sql = @"
+                                    MERGE Diem AS target
+                                    USING (SELECT @MSSV AS MSSV, @MaMon AS MaMon) AS source
+                                    ON target.MSSV = source.MSSV AND target.MaMon = source.MaMon
+                                    WHEN MATCHED THEN
+                                        UPDATE SET DiemThi = @DiemThi
+                                    WHEN NOT MATCHED THEN
+                                        INSERT (MSSV, MaMon, DiemThi)
+                                        VALUES (@MSSV, @MaMon, @DiemThi);";
+
+                                SqlCommand cmd = new SqlCommand(sql, conn);
+                                cmd.Parameters.AddWithValue("@MSSV", mssv);
+                                cmd.Parameters.AddWithValue("@MaMon", maMon);
+                                cmd.Parameters.AddWithValue("@DiemThi", diem);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
                 }
-            }
 
-            LoadSinhVien();
+                lblThongBao.Text = "✓ Lưu điểm thành công!";
+                lblThongBao.CssClass = "message-label";
+                lblThongBao.Style["background-color"] = "#d4edda";
+                lblThongBao.Style["color"] = "#155724";
+                lblThongBao.Style["border"] = "1px solid #c3e6cb";
+                LoadSinhVien();
+            }
+            catch (Exception ex)
+            {
+                lblThongBao.Text = "✗ Lỗi: " + ex.Message;
+                lblThongBao.CssClass = "message-label";
+                lblThongBao.Style["background-color"] = "#f8d7da";
+                lblThongBao.Style["color"] = "#721c24";
+                lblThongBao.Style["border"] = "1px solid #f5c6cb";
+            }
+        }
+
+        protected void btnQuayLai_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("Default.aspx");
         }
     }
 }
