@@ -24,12 +24,21 @@ namespace SinhVienWeb
         protected global::System.Web.UI.WebControls.Label lblXinChao;
 
         /// <summary>
-        /// gvMonLop control.
+        /// btnDangXuat control.
         /// </summary>
         /// <remarks>
         /// Auto-generated field.
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
-        protected global::System.Web.UI.WebControls.GridView gvMonLop;
+        protected global::System.Web.UI.WebControls.Button btnDangXuat;
+
+        /// <summary>
+        /// rptCourses control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.WebControls.Repeater rptCourses;
     }
 }
